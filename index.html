@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin - Multi‑upload & Manage Items (ImgBB)</title>
+  <!-- Firebase 9 compat (for simplicity) & Font Awesome icons -->
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+  <style>
+    * { box-sizing: border-box; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; margin: 0; }
+    body { background: #f4f7fb; padding: 25px 20px; display: flex; flex-direction: column; align-items: center; }
+    .container { max-width: 1400px; width: 100%; }
+
+    /* cards layout */
+    .panel { background: white; border-radius: 28px; padding: 28px 30px; box-shadow: 0 12px 30px rgba(0,0,0,0.05); margin-bottom: 40px; }
+    h2 { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 1.8rem; letter-spacing: -0.3px; color: #1a2639; margin-top: 0; margin-bottom: 24px; border-left: 7px solid #2a7f62; padding-left: 18px; }
+    h2 i { color: #2a7f62; font-size: 1.8rem; }
+
+    /* upload area */
+    .flex-row { display: flex; gap: 25px; flex-wrap: wrap; }
+    .paste-section { flex: 2; min-width: 320px; }
+    .paste-section textarea { width: 100%; padding: 16px; border: 1px solid #dde2e9; border-radius: 18px; font-size: 0.95rem; background: #f9fbfd; resize: vertical; margin-bottom: 18px; transition: 0.15s; }
+    .paste-section textarea:focus { border-color: #2a7f62; outline: none; background: white; box-shadow: 0 0 0 3px rgba(42,127,98,0.15); }
+
+    .file-section { flex: 1.2; min-width: 260px; background: #f2f6fa; border-radius: 24px; padding: 22px 20px; border: 1px dashed #a0b8cc; }
+    .file-section label { font-weight: 600; color: #1f3a4b; display: block; margin-bottom: 12px; font-size: 1.1rem; }
+    .file-section input[type="file"] { background: white; padding: 12px; border-radius: 40px; width: 100%; border: 1px solid #b8c9da; margin-bottom: 20px; }
+    .file-note { font-size: 0.85rem; color: #3d5969; background: #e6edf3; border-radius: 40px; padding: 8px 16px; display: inline-block; }
+
+    .action-bar { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; margin-top: 25px; }
+    .btn { background: white; border: 1px solid #b3c7da; padding: 12px 28px; border-radius: 50px; font-weight: 600; font-size: 1rem; cursor: pointer; transition: 0.15s; display: inline-flex; align-items: center; gap: 9px; box-shadow: 0 2px 6px rgba(0,0,0,0.02); }
+    .btn-primary { background: #1e3f3c; border: 1px solid #1e3f3c; color: white; box-shadow: 0 8px 16px -6px rgba(30,63,60,0.3); }
+    .btn-primary i { color: white; }
+    .btn-primary:hover { background: #14302d; border-color: #14302d; }
+    .btn-outline { background: white; color: #1f3a4b; }
+    .btn-outline:hover { background: #e2ecf5; border-color: #8ba5c0; }
+    .btn-danger { background: #ffeae9; border-color: #dcb4b2; color: #aa3f3a; }
+    .btn-danger:hover { background: #ffdbd8; }
+
+    .badge { background: #2a7f62; color: white; border-radius: 50px; padding: 4px 14px; font-size: 0.8rem; font-weight: 500; margin-left: 12px; }
+
+    /* product grid */
+    .items-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 22px; margin-top: 22px; }
+    .product-card { background: white; border-radius: 26px; padding: 16px 16px 18px 16px; box-shadow: 0 8px 20px rgba(0, 0, 0, 0.02); border: 1px solid #e3eaf0; transition: 0.15s; position: relative; }
+    .product-card:hover { box-shadow: 0 16px 28px rgba(0,0,0,0.06); border-color: #cbdae6; }
+    .card-select { position: absolute; top: 18px; left: 18px; z-index: 7; }
+    .card-select input[type="checkbox"] { width: 22px; height: 22px; cursor: pointer; accent-color: #2a7f62; border-radius: 8px; }
+    .product-img { width: 100%; height: 170px; object-fit: cover; border-radius: 18px; background: #f0f4f9; margin-bottom: 14px; border: 1px solid #dee8f0; }
+    .product-title { font-weight: 600; font-size: 1rem; color: #1e2e3d; margin: 8px 0 4px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+    .product-price { font-weight: 700; font-size: 1.35rem; color: #1f4e3d; }
+    .product-price small { font-weight: 400; font-size: 0.85rem; color: #687d8f; }
+    .product-discount { background: #d64f44; color: white; font-size: 0.75rem; font-weight: 600; padding: 4px 10px; border-radius: 40px; display: inline-block; margin: 8px 0 4px; }
+    .product-link { font-size: 0.75rem; word-break: break-all; color: #2d6f9c; background: #eaf1f9; padding: 8px 12px; border-radius: 30px; margin: 12px 0 6px; }
+    .card-actions { display: flex; gap: 10px; margin-top: 10px; }
+    .edit-btn, .delete-single { background: white; border: 1px solid #cbd6e2; border-radius: 40px; padding: 8px 15px; font-size: 0.8rem; cursor: pointer; transition: 0.1s; }
+    .edit-btn:hover, .delete-single:hover { background: #e9f0f7; }
+
+    .selection-toolbar { background: #1a2b36; color: white; border-radius: 60px; padding: 12px 25px; display: inline-flex; gap: 20px; align-items: center; flex-wrap: wrap; margin-bottom: 20px; }
+    .selection-toolbar span { font-weight: 500; }
+    .selection-toolbar .btn-white { background: white; color: #1a2b36; border: none; }
+    .hidden { display: none !important; }
+    .mt-4 { margin-top: 28px; }
+    .ml-2 { margin-left: 12px; }
+    i { color: #4a617c; }
+    .btn i { color: inherit; }
+  </style>
+</head>
+<body>
+<div class="container">
+  <!-- UPLOAD PANEL (MULTI-IMAGE SUPPORT) -->
+  <div class="panel">
+    <h2><i class="fas fa-cloud-upload-alt"></i> Upload items – multiple photos</h2>
+    <div class="flex-row">
+      <div class="paste-section">
+        <textarea id="pasteText" rows="5" placeholder="Paste AliExpress product text (KES, %, link automatically extracted)&#10;Example: Trendy sneakers KES 2450 30% off https://s.click.aliexpress.com/abc">Trendy sneakers KES 2450 30% off https://s.click.aliexpress.com/abc</textarea>
+        <p style="color:#3b5c74;margin:8px 0 0 10px;"><i class="fas fa-info-circle"></i> Price (KES), discount (%), link are extracted.</p>
+      </div>
+      <div class="file-section">
+        <label><i class="fas fa-images"></i> Select one or more images</label>
+        <input type="file" id="imageFiles" accept="image/*" multiple>
+        <div class="file-note"><i class="far fa-check-circle"></i> You can choose multiple photos at once. Each image creates a separate product (same text).</div>
+      </div>
+    </div>
+    <div class="action-bar">
+      <button class="btn btn-primary" id="addMultiItemBtn"><i class="fas fa-plus-circle"></i> Upload all images as items</button>
+      <span id="uploadStatus" style="color:#2a7f62; font-weight:500;"></span>
+    </div>
+  </div>
+
+  <!-- MANAGE PANEL (EDIT / DELETE MULTIPLE) -->
+  <div class="panel" style="padding-top: 20px;">
+    <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 15px; margin-bottom: 20px;">
+      <h2 style="margin-bottom:0;"><i class="fas fa-clipboard-list"></i> Manage posted products</h2>
+      <div id="selectionToolbar" class="selection-toolbar hidden">
+        <span><span id="selectedCount">0</span> selected</span>
+        <button class="btn btn-white" id="editSelectedBtn"><i class="fas fa-pen"></i> Edit (first)</button>
+        <button class="btn btn-white" id="deleteSelectedBtn"><i class="fas fa-trash-alt"></i> Delete</button>
+        <button class="btn btn-white" id="clearSelectionBtn"><i class="fas fa-times"></i> Clear</button>
+      </div>
+      <button class="btn btn-outline" id="refreshList"><i class="fas fa-sync-alt"></i> Refresh list</button>
+    </div>
+    <div id="itemsContainer" class="items-grid">
+      <!-- Products will be injected here -->
+      <div style="grid-column:1/-1; text-align:center; padding: 40px; color:#6f8a9f;">Loading items...</div>
+    </div>
+  </div>
+</div>
+
+<script>
+  (function() {
+    // Firebase config
+    const firebaseConfig = {
+      apiKey: "AIzaSyC23iQpw8dvOamO5FpcrWWlgTwJ8gvmuM4",
+      authDomain: "reconnect-10733.firebaseapp.com",
+      projectId: "reconnect-10733",
+      messagingSenderId: "902709752297",
+      appId: "1:902709752297:web:b89e694688d25472ac1b78"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+
+    const imgbbApiKey = "19c4f7201834438080bb09c81999d75c"; // ImgBB key
+
+    // DOM elements
+    const pasteTextEl = document.getElementById('pasteText');
+    const imageFilesEl = document.getElementById('imageFiles');
+    const addMultiBtn = document.getElementById('addMultiItemBtn');
+    const uploadStatus = document.getElementById('uploadStatus');
+    const itemsContainer = document.getElementById('itemsContainer');
+    const refreshBtn = document.getElementById('refreshList');
+    const selectionToolbar = document.getElementById('selectionToolbar');
+    const selectedCountSpan = document.getElementById('selectedCount');
+    const editSelectedBtn = document.getElementById('editSelectedBtn');
+    const deleteSelectedBtn = document.getElementById('deleteSelectedBtn');
+    const clearSelectionBtn = document.getElementById('clearSelectionBtn');
+
+    // Local state for items & selections
+    let currentItems = [];           // array of { id, ...data }
+    let selectedIds = new Set();     // set of ids (string)
+
+    // ------------------- helper: extract product data from text ------------
+    function extractProductData(text) {
+      const priceMatch = text.match(/KES\s*(\d+)/i);
+      const discountMatch = text.match(/(\d+)%/);
+      const linkMatch = text.match(/https?:\/\/\S+/);
+
+      let title = text;
+      // remove extracted parts gently
+      if (priceMatch?.[0]) title = title.replace(priceMatch[0], '');
+      if (discountMatch?.[0]) title = title.replace(discountMatch[0], '');
+      if (linkMatch?.[0]) title = title.replace(linkMatch[0], '');
+      title = title.replace(/\s+/g, ' ').trim();
+      if (title === '') title = 'Unnamed product';
+
+      const price = priceMatch ? parseInt(priceMatch[1]) : 0;
+      const discount = discountMatch ? parseInt(discountMatch[1]) : 0;
+      const affiliateLink = linkMatch ? linkMatch[0] : '';
+
+      return { title, price, discount, affiliateLink };
+    }
+
+    // ------------------- upload one file to ImgBB --------------------------
+    async function uploadToImgBB(file) {
+      const formData = new FormData();
+      formData.append('image', file);
+      const response = await fetch(`https://api.imgbb.com/1/upload?key=${imgbbApiKey}`, {
+        method: 'POST',
+        body: formData
+      });
+      const data = await response.json();
+      if (!data.success) throw new Error('ImgBB upload failed: ' + (data.error?.message || 'unknown'));
+      return data.data.url; // direct image link
+    }
+
+    // ------------------- save item to firestore ----------------------------
+    async function saveItemToFirestore(itemData) {
+      return await db.collection('items').add(itemData);
+    }
+
+    // ------------------- multi upload handler -------------------------------
+    addMultiBtn.addEventListener('click', async () => {
+      const text = pasteTextEl.value.trim();
+      const files = imageFilesEl.files; // FileList
+
+      if (!text) return alert('Please paste product text.');
+      if (!files || files.length === 0) return alert('Select at least one image.');
+
+      const productBase = extractProductData(text);
+      if (!productBase.affiliateLink) console.warn('No affiliate link found.');
+
+      uploadStatus.innerText = `⏳ Uploading ${files.length} image(s) ...`;
+      let successCount = 0;
+      let errorMessages = [];
+
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        try {
+          const imageUrl = await uploadToImgBB(file);
+          // create a clean copy + maybe differentiate title (optional: append index)
+          const itemCopy = { 
+            ...productBase, 
+            imageUrl,
+            // optional: if multiple same text, you could add suffix to title to distinguish
+            title: files.length > 1 ? `${productBase.title} (${i+1})` : productBase.title
+          };
+          await saveItemToFirestore(itemCopy);
+          successCount++;
+        } catch (err) {
+          console.error('Upload error for', file.name, err);
+          errorMessages.push(`${file.name}: ${err.message}`);
+        }
+      }
+
+      if (successCount > 0) {
+        uploadStatus.innerText = `✅ Uploaded ${successCount} item(s).`;
+        pasteTextEl.value = '';        // optional clear
+        imageFilesEl.value = '';        // clear file input
+        loadItems();                    // refresh list
+      } else {
+        uploadStatus.innerText = `❌ Failed. Check console.`;
+      }
+      if (errorMessages.length) {
+        alert('Some uploads failed:\n' + errorMessages.join('\n'));
+      }
+    });
+
+    // ------------------- render products with checkboxes -------------------
+    function renderItems(items) {
+      if (items.length === 0) {
+        itemsContainer.innerHTML = `<div style="grid-column:1/-1; text-align:center; padding: 50px; color:#7b94a8;"><i class="fas fa-box-open" style="font-size:2.5rem; opacity:0.5;"></i><br>No products yet. Add some above.</div>`;
+        return;
+      }
+
+      let html = '';
+      items.forEach(item => {
+        const checked = selectedIds.has(item.id) ? 'checked' : '';
+        html += `
+          <div class="product-card" data-id="${item.id}">
+            <div class="card-select">
+              <input type="checkbox" class="item-checkbox" data-id="${item.id}" ${checked}>
+            </div>
+            <img src="${item.imageUrl || 'https://via.placeholder.com/260x170?text=No+Image'}" class="product-img" loading="lazy">
+            <div class="product-title">${escapeHtml(item.title) || 'untitled'}</div>
+            <div class="product-price">KES ${item.price ?? 0} <small>${item.discount ? item.discount+'% off' : ''}</small></div>
+            ${item.discount ? `<div class="product-discount">-${item.discount}%</div>` : ''}
+            <div class="product-link"><i class="fas fa-link"></i> ${escapeHtml(item.affiliateLink) || 'no link'}</div>
+            <div class="card-actions">
+              <button class="edit-btn" data-id="${item.id}" data-action="edit"><i class="fas fa-edit"></i> Edit</button>
+              <button class="delete-single" data-id="${item.id}" data-action="delete-single"><i class="fas fa-trash"></i> Delete</button>
+            </div>
+          </div>
+        `;
+      });
+      itemsContainer.innerHTML = html;
+
+      // Attach listeners to checkboxes
+      document.querySelectorAll('.item-checkbox').forEach(cb => {
+        cb.addEventListener('change', (e) => {
+          const id = e.target.dataset.id;
+          if (e.target.checked) selectedIds.add(id);
+          else selectedIds.delete(id);
+          updateSelectionUI();
+        });
+      });
+
+      // Attach single edit/delete (using event delegation is simpler but we attach directly)
+      document.querySelectorAll('.edit-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          const id = btn.dataset.id;
+          editSingleItem(id);
+        });
+      });
+      document.querySelectorAll('.delete-single').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          const id = btn.dataset.id;
+          deleteSingleItem(id);
+        });
+      });
+    }
+
+    // simple escape
+    function escapeHtml(unsafe) {
+      if (!unsafe) return unsafe;
+      return unsafe.replace(/[&<>"]/g, function(m) {
+        if(m === '&') return '&amp;'; if(m === '<') return '&lt;'; if(m === '>') return '&gt;'; if(m === '"') return '&quot;';
+        return m;
+      });
+    }
+
+    // Update selection toolbar visibility & count
+    function updateSelectionUI() {
+      const count = selectedIds.size;
+      selectedCountSpan.innerText = count;
+      if (count > 0) {
+        selectionToolbar.classList.remove('hidden');
+      } else {
+        selectionToolbar.classList.add('hidden');
+      }
+      // sync checkboxes (in case external change)
+      document.querySelectorAll('.item-checkbox').forEach(cb => {
+        cb.checked = selectedIds.has(cb.dataset.id);
+      });
+    }
+
+    // Clear selection
+    clearSelectionBtn.addEventListener('click', () => {
+      selectedIds.clear();
+      updateSelectionUI();
+    });
+
+    // Delete selected multiple
+    deleteSelectedBtn.addEventListener('click', async () => {
+      if (selectedIds.size === 0) return;
+      if (!confirm(`Delete ${selectedIds.size} item(s)?`)) return;
+
+      const promises = [];
+      for (let id of selectedIds) {
+        promises.push(db.collection('items').doc(id).delete().catch(e => console.warn(id, e)));
+      }
+      await Promise.allSettled(promises);
+      selectedIds.clear();
+      await loadItems(); // re-render
+      updateSelectionUI();
+    });
+
+    // Edit selected (first one only — you may extend as needed)
+    editSelectedBtn.addEventListener('click', () => {
+      if (selectedIds.size === 0) return;
+      const firstId = Array.from(selectedIds)[0];
+      editSingleItem(firstId);
+    });
+
+    // Edit single item: prompt new values for title, price, discount, link
+    async function editSingleItem(id) {
+      try {
+        const docSnap = await db.collection('items').doc(id).get();
+        if (!docSnap.exists) return alert('Item not found');
+        const data = docSnap.data();
+
+        const newTitle = prompt('Edit title:', data.title || '');
+        if (newTitle === null) return;
+        const newPrice = prompt('Edit price (KES):', data.price || '');
+        if (newPrice === null) return;
+        const newDiscount = prompt('Edit discount % (or 0):', data.discount || '0');
+        if (newDiscount === null) return;
+        const newLink = prompt('Edit affiliate link:', data.affiliateLink || '');
+        if (newLink === null) return;
+
+        const updated = {
+          title: newTitle.trim() || 'edited product',
+          price: parseInt(newPrice) || 0,
+          discount: parseInt(newDiscount) || 0,
+          affiliateLink: newLink.trim(),
+          imageUrl: data.imageUrl // keep old image
+        };
+        await db.collection('items').doc(id).update(updated);
+        loadItems();
+        selectedIds.clear(); // optional
+      } catch (err) {
+        console.error(err);
+        alert('Error during edit');
+      }
+    }
+
+    // Delete single item
+    async function deleteSingleItem(id) {
+      if (!confirm('Delete this item?')) return;
+      await db.collection('items').doc(id).delete();
+      selectedIds.delete(id);
+      await loadItems();
+      updateSelectionUI();
+    }
+
+    // Load items from firestore
+    async function loadItems() {
+      try {
+        const snapshot = await db.collection('items').get();
+        const items = [];
+        snapshot.forEach(doc => items.push({ id: doc.id, ...doc.data() }));
+        currentItems = items;
+        renderItems(items);
+        // keep selection only for existing ids
+        const existingIds = new Set(items.map(i => i.id));
+        for (let id of selectedIds) {
+          if (!existingIds.has(id)) selectedIds.delete(id);
+        }
+        updateSelectionUI();
+      } catch (err) {
+        console.error('load error', err);
+        itemsContainer.innerHTML = '<div style="color:red;">Failed to load items.</div>';
+      }
+    }
+
+    // refresh
+    refreshBtn.addEventListener('click', loadItems);
+
+    // initial load
+    loadItems();
+
+    // if you click outside checkbox but want to keep toolbar consistent
+    document.addEventListener('change', (e) => {
+      if (e.target.classList.contains('item-checkbox')) {
+        // already handled, but just in case
+      }
+    });
+  })();
+</script>
+</body>
+</html>
